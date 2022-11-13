@@ -449,7 +449,6 @@ while True:
             player.health -= 1
             objects.remove(e)
             enemies.remove(e)
-            global offset
             offset = screen_shake(5)
             spawn_particles(e.x, e.y)
             continue
