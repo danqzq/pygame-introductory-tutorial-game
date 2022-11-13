@@ -253,7 +253,7 @@ def game_over():
 def shoot():
     player_center = player.get_center()
     bullet = Object(player_center[0], player_center[1], BULLET_SIZE[0], BULLET_SIZE[1], BULLET)
-    bullet.velocity = [target.x - bullet.x, target.y - bullet.y]
+    bullet.velocity = [target.x + target.width / 2 - bullet.x, target.y + target.height / 2 - bullet.y]
 
     length = (bullet.velocity[0] ** 2 + bullet.velocity[1] ** 2) ** 0.5
 
