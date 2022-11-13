@@ -43,7 +43,9 @@ GAME_OVER_TEXT = "Game Over! Press 'R' to Restart."
 # Game Settings
 DIFFICULTY = 1
 PLAYER_MAX_HEALTH = 3
+PLAYER_SPEED = 4
 ENEMY_MAX_HEALTH = 3
+ENEMY_SPEED = 1.5
 BULLET_SPEED = 10
 ENEMY_SPAWN_DISTANCE = 250
 
@@ -229,7 +231,7 @@ def load_high_score():
 
 def start():
     global player, bullets, score
-    player = Player(WINDOW_SIZE[0] / 2 - 37.5, WINDOW_SIZE[1] / 2 - 37.5, 75, 75, PLAYER_TILESET, 4)
+    player = Player(WINDOW_SIZE[0] / 2 - 37.5, WINDOW_SIZE[1] / 2 - 37.5, 75, 75, PLAYER_TILESET, PLAYER_SPEED)
     player.collider = [player.width / 2, player.height / 1.5]
 
     bullets = []
@@ -348,7 +350,7 @@ def enemy_spawner():
         return
     randomX = random.randint(BOUNDS_X[0], BOUNDS_X[1] - ENEMY_SIZE[0])
     randomY = random.randint(BOUNDS_Y[0], BOUNDS_Y[1] - ENEMY_SIZE[1])
-    en = Enemy(randomX, randomY, ENEMY_SIZE[0], ENEMY_SIZE[1], ENEMY_TILESET, 1.5)
+    en = Enemy(randomX, randomY, ENEMY_SIZE[0], ENEMY_SIZE[1], ENEMY_TILESET, ENEMY_SPEED)
     player_center = player.get_center()
     if abs(player_center[0] - en.x) < ENEMY_SPAWN_DISTANCE and abs(player_center[1] - en.y) < ENEMY_SPAWN_DISTANCE:
         objects.remove(en)
