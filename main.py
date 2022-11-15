@@ -6,6 +6,8 @@ pygame.init()
 pygame.font.get_init()
 
 # Constants
+IS_DEBUG = False
+
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
@@ -13,7 +15,7 @@ RED = (255, 0, 0)
 WINDOW_SIZE = (1280, 720)
 WINDOW_TITLE = "Baller Knight"
 
-FRAME_RATE = 144
+FRAME_RATE = 60
 
 BOUNDS_X = (66, 1214)
 BOUNDS_Y = (50, 620)
@@ -48,10 +50,11 @@ ENEMY_MAX_HEALTH = 3
 ENEMY_SPEED = 1.5
 BULLET_SPEED = 10
 ENEMY_SPAWN_DISTANCE = 250
+BULLETS_RICOCHET = False
 
 
-shake_window = pygame.display.set_mode(WINDOW_SIZE)
-window = shake_window.copy()
+SHAKE_WINDOW = pygame.display.set_mode(WINDOW_SIZE)
+WINDOW = SHAKE_WINDOW.copy()
 clock = pygame.time.Clock()
 
 text_font = pygame.font.Font("assets/font.otf", 32)
@@ -73,7 +76,7 @@ class Object:
         objects.append(self)
 
     def draw(self):
-        window.blit(pygame.transform.scale(self.image, (self.width, self.height)), (self.x, self.y))
+        WINDOW.blit(pygame.transform.scale(self.image, (self.width, self.height)), (self.x, self.y)) 
 
     def update(self):
         self.x += self.velocity[0]
@@ -114,7 +117,11 @@ class Entity(Object):
         self.change_direction()
 
         img = pygame.transform.flip(img, self.flipX, False)
-        window.blit(img, (self.x, self.y))
+        WINDOW.blit(img, (self.x, self.y))
+
+        if IS_DEBUG:
+            x, y = self.get_center()
+            pygame.draw.rect(WINDOW, RED, (x - self.collider[0] / 2, y - self.collider[1] / 2, self.collider[0], self.collider[1]), width=1)
 
         if self.velocity[0] == 0 and self.velocity[1] == 0:
             self.frame = 0
@@ -160,7 +167,7 @@ class Enemy(Entity):
         self.height = 0
         self.grow_speed = 2
 
-        self.collider = [width / 1.8, height / 1.2]
+        self.collider = [width / 2.5, height / 1.5]
         self.health = ENEMY_MAX_HEALTH
         enemies.append(self)
 
@@ -171,7 +178,8 @@ class Enemy(Entity):
             self.height += self.grow_speed
 
         player_center = player.get_center()
-        self.velocity = [player_center[0] - self.x, player_center[1] - self.y]
+        enemy_center = self.get_center()
+        self.velocity = [player_center[0] - enemy_center[0], player_center[1] - enemy_center[1]]
         length = (self.velocity[0] ** 2 + self.velocity[1] ** 2) ** 0.5
         self.velocity = [self.velocity[0] / length, self.velocity[1] / length]
         self.velocity = [self.velocity[0] * self.speed, self.velocity[1] * self.speed]
@@ -232,7 +240,7 @@ def load_high_score():
 def start():
     global player, bullets, score
     player = Player(WINDOW_SIZE[0] / 2 - 37.5, WINDOW_SIZE[1] / 2 - 37.5, 75, 75, PLAYER_TILESET, PLAYER_SPEED)
-    player.collider = [player.width / 2, player.height / 1.5]
+    player.collider = [player.width / 2.5, player.height / 2]
 
     bullets = []
 
@@ -290,8 +298,10 @@ def restart():
 
 
 def check_collisions(obj1, obj2):
-    if obj1.x + obj1.collider[0] > obj2.x and obj1.x < obj2.x + obj2.collider[0]:
-        return obj1.y + obj1.collider[1] > obj2.y and obj1.y < obj2.y + obj2.collider[1]
+    x1, y1 = obj1.get_center()
+    x2, y2 = obj2.get_center()
+    if x1 + obj1.collider[0] / 2 > x2 - obj2.collider[0] / 2 and x1 - obj1.collider[0] / 2 < x2 + obj2.collider[0] / 2:
+        return y1 + obj1.collider[1] / 2 > y2 - obj2.collider[1] / 2 and y1 - obj1.collider[1] / 2 < y2 + obj2.collider[1] / 2
     return False
 
 
@@ -324,24 +334,24 @@ def handle_event(evt):
 def display_ui():
     if not has_game_started:
         game_over_text = text_font.render(START_GAME_TEXT, True, BLACK)
-        window.blit(game_over_text, (WINDOW_SIZE[0] / 2 - game_over_text.get_width() / 2,
+        WINDOW.blit(game_over_text, (WINDOW_SIZE[0] / 2 - game_over_text.get_width() / 2,
                                      WINDOW_SIZE[1] / 2 - game_over_text.get_height() / 2))
         return
 
     for i in range(player.max_health):
         img = pygame.image.load(HEART_EMPTY if i >= player.health else HEART_FULL)
         img = pygame.transform.scale(img, (50, 50))
-        window.blit(img, (i * 50 + WINDOW_SIZE[0] / 2 - player.max_health * 25, 25))
+        WINDOW.blit(img, (i * 50 + WINDOW_SIZE[0] / 2 - player.max_health * 25, 25))
 
     score_text = text_font.render(f'Score: {score}', True, BLACK)
-    window.blit(score_text, (score_text.get_width() / 2, 0 + 25))
+    WINDOW.blit(score_text, (score_text.get_width() / 2, 0 + 25))
 
     high_score_text = text_font.render(f'High Score: {high_score}', True, BLACK)
-    window.blit(high_score_text, (WINDOW_SIZE[0] - high_score_text.get_width() - 75, 0 + 25))
+    WINDOW.blit(high_score_text, (WINDOW_SIZE[0] - high_score_text.get_width() - 75, 0 + 25))
 
     if is_game_over:
         game_over_text = text_font.render(GAME_OVER_TEXT, True, BLACK)
-        window.blit(game_over_text, (WINDOW_SIZE[0] / 2 - game_over_text.get_width() / 2,
+        WINDOW.blit(game_over_text, (WINDOW_SIZE[0] / 2 - game_over_text.get_width() / 2,
                                      WINDOW_SIZE[1] / 2 - game_over_text.get_height() / 2))
 
 
@@ -376,7 +386,7 @@ def spawn_particles(x, y):
 
 def update_screen():
     clock.tick(FRAME_RATE)
-    shake_window.blit(window, next(offset))
+    SHAKE_WINDOW.blit(WINDOW, next(offset))
     pygame.display.update()
 
 
@@ -395,7 +405,7 @@ while True:
     player.y = max(BOUNDS_Y[0], min(player.y, BOUNDS_Y[1] - player.height))
 
     background = pygame.transform.scale(pygame.image.load(BACKGROUND), (1280, 720))
-    window.blit(background, (0, 0))
+    WINDOW.blit(background, (0, 0))
 
     display_ui()
 
@@ -437,12 +447,16 @@ while True:
         obj.update()
 
     for b in bullets:
+        if BULLETS_RICOCHET:
+            if BOUNDS_X[0] > b.x or b.x > BOUNDS_X[1]:
+                b.velocity[0] *= -1
+            elif BOUNDS_Y[0] > b.y or b.y > BOUNDS_Y[1]:
+                b.velocity[1] *= -1
+            continue
         if BOUNDS_X[0] <= b.x <= BOUNDS_X[1] and BOUNDS_Y[0] <= b.y <= BOUNDS_Y[1]:
             continue
         bullets.remove(b)
         objects.remove(b)
-        pygame.mouse.set_visible(True)
-        del b
 
     for e in enemies:
         if check_collisions(e, player):
