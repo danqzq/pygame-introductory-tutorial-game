@@ -36,6 +36,7 @@ CURSOR = "assets/cursor.png"
 HEART_FULL = "assets/heart.png"
 HEART_EMPTY = "assets/heart_empty.png"
 PARTICLES = "assets/particles.png"
+PORTAL = "assets/portal.png"
 
 SAVE_FILE = "save_file.txt"
 
@@ -62,6 +63,14 @@ text_font = pygame.font.Font("assets/font.otf", 32)
 objects = []
 
 offset = repeat((0, 0))
+
+
+map_of_rooms = [[0, 4, 0],
+                [4, 9, 4],
+                [0, 4, 0]]
+
+
+current_room = [1, 1]
 
 
 class Object:
@@ -221,12 +230,15 @@ global player, bullets
 target = Object(100, 100, CURSOR_MIN_SIZE, CURSOR_MIN_SIZE, CURSOR)
 enemies = []
 particles = []
+portals = []
 
 # Game Variables
 global score, high_score, save_file
 
 has_game_started = False
 is_game_over = False
+
+is_in_portal = False
 
 
 # Functions
@@ -235,6 +247,58 @@ def load_high_score():
     save_file = open(SAVE_FILE, "r")
     high_score = int(save_file.read())
     save_file.close()
+    
+    
+def generate_room():
+    global portals
+    
+    portal_left = Object(100, WINDOW_SIZE[1] / 2 - 50, 100, 100, PORTAL)
+    portal_left.next_room = [current_room[0] - 1, current_room[1]]
+    
+    portal_right = Object(WINDOW_SIZE[0] - 200, WINDOW_SIZE[1] / 2 - 50, 100, 100, PORTAL)
+    portal_right.next_room = [current_room[0] + 1, current_room[1]]
+    
+    portal_down = Object(WINDOW_SIZE[0] / 2 - 50, 100, 100, 100, PORTAL)
+    portal_down.next_room = [current_room[0], current_room[1] - 1]
+    
+    portal_up = Object(WINDOW_SIZE[0] / 2 - 50, WINDOW_SIZE[1] - 200, 100, 100, PORTAL)
+    portal_up.next_room = [current_room[0], current_room[1] + 1]
+    
+    portals = [portal_left, portal_right, portal_up, portal_down]
+    
+    for p in portals:
+        if p.next_room[0] < 0 or p.next_room[0] > len(map_of_rooms) - 1 or p.next_room[1] < 0 or p.next_room[1] > len(map_of_rooms[current_room[0]]) - 1:
+            objects.remove(p)
+            portals.remove(p)
+    
+
+def load_new_room():
+    global player, enemies, bullets, particles, portals, objects, is_in_portal, fade_in_alpha
+    
+    is_in_portal = False
+    fade_in_alpha = 0
+    
+    objects.remove(player)
+    
+    player = Player(WINDOW_SIZE[0] / 2 - 37.5, WINDOW_SIZE[1] / 2 - 37.5, 75, 75, PLAYER_TILESET, PLAYER_SPEED)
+    player.collider = [player.width / 2.5, player.height / 2]
+
+    for x in portals:
+        objects.remove(x)
+        portals.remove(x)
+
+    for x in enemies:
+        x.destroy()
+
+    for x in bullets:
+        objects.remove(x)
+        bullets.remove(x)
+        
+    for x in particles:
+        objects.remove(x)
+        particles.remove(x)
+        
+    generate_room()
 
 
 def start():
@@ -243,6 +307,8 @@ def start():
     player.collider = [player.width / 2.5, player.height / 2]
 
     bullets = []
+
+    generate_room()
 
     score = 0
     load_high_score()
@@ -348,6 +414,9 @@ def display_ui():
 
     high_score_text = text_font.render(f'High Score: {high_score}', True, BLACK)
     WINDOW.blit(high_score_text, (WINDOW_SIZE[0] - high_score_text.get_width() - 75, 0 + 25))
+    
+    current_room_text = text_font.render(f'Current room: ({current_room[0]}; {current_room[1]})', True, BLACK)
+    WINDOW.blit(current_room_text, (current_room_text.get_width() / 2, WINDOW_SIZE[1] - 75))
 
     if is_game_over:
         game_over_text = text_font.render(GAME_OVER_TEXT, True, BLACK)
@@ -356,6 +425,8 @@ def display_ui():
 
 
 def enemy_spawner():
+    if map_of_rooms[current_room[0]][current_room[1]] <= 0:
+        return
     if len(enemies) > (score + 10) // (10 / DIFFICULTY):
         return
     randomX = random.randint(BOUNDS_X[0], BOUNDS_X[1] - ENEMY_SIZE[0])
@@ -393,6 +464,7 @@ def update_screen():
 player_tileset = load_tileset(PLAYER_TILESET, 16, 16)
 pygame.display.set_icon(player_tileset[0][0])
 pygame.display.set_caption(WINDOW_TITLE)
+fade_in_alpha = 0
 
 start()
 
@@ -432,6 +504,19 @@ while True:
             continue
         objects.remove(p)
         objects.insert(0, p)
+        
+    if is_in_portal:
+        fade_in_alpha += 26
+        if fade_in_alpha >= 255:
+            load_new_room()
+            continue
+                
+    for portal in portals:
+        if is_in_portal:
+            break
+        if check_collisions(portal, player):
+            is_in_portal = True
+            current_room = portal.next_room
 
     pygame.mouse.set_visible(False)
     mousePos = pygame.mouse.get_pos()
@@ -445,7 +530,7 @@ while True:
 
     for obj in objects:
         obj.update()
-
+        
     for b in bullets:
         if BULLETS_RICOCHET:
             if BOUNDS_X[0] > b.x or b.x > BOUNDS_X[1]:
@@ -468,9 +553,15 @@ while True:
             continue
         for b in bullets:
             if check_collisions(e, b):
+                map_of_rooms[current_room[0]][current_room[1]] -= 1
                 e.take_damage(1)
                 bullets.remove(b)
                 objects.remove(b)
+                
+    s = pygame.Surface((WINDOW_SIZE[0], WINDOW_SIZE[1]))
+    s.set_alpha(fade_in_alpha)
+    s.fill((0,0,0))
+    WINDOW.blit(s, (0,0))
 
     enemy_spawner()
     update_screen()
