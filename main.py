@@ -10,9 +10,18 @@ BLACK = (0, 0, 0)
 WINDOW_SIZE = (1280, 720)
 WINDOW_TITLE = "Pygame Tutorial"
 
+BOUNDS_X = (66, 1214)
+BOUNDS_Y = (50, 620)
+
 HORIZONTAL = 1
 UP = 2
 DOWN = 0
+
+BACKGROUND = "assets/background.png"
+PLAYER_TILESET = "assets/player-Sheet.png"
+ENEMY_TILESET = "assets/enemy-Sheet.png"
+BULLET = "assets/bullet.png"
+CURSOR = "assets/cursor.png"
 
 FRAME_RATE = 60
 ANIMATION_FRAME_RATE = 10
@@ -22,9 +31,11 @@ pygame.display.set_caption(WINDOW_TITLE)
 
 CLOCK = pygame.time.Clock()
 
-background = pygame.transform.scale(pygame.image.load("assets/background.png"), WINDOW_SIZE)
+background = pygame.transform.scale(pygame.image.load(BACKGROUND), WINDOW_SIZE)
 
 objects = []
+bullets = []
+enemies = []
 
 
 class Object:
@@ -33,7 +44,9 @@ class Object:
         self.y = y
         self.width = width
         self.height = height
-        self.image = image
+        if image is not None:
+            self.image = pygame.image.load(image)
+        self.collider = [width, height]
         self.velocity = [0, 0]
 
         objects.append(self)
@@ -45,6 +58,9 @@ class Object:
         self.x += self.velocity[0]
         self.y += self.velocity[1]
         self.draw()
+
+    def get_center(self):
+        return self.x + self.width / 2, self.y + self.height / 2
 
 
 class Entity(Object):
@@ -105,6 +121,59 @@ class Player(Entity):
         super().__init__(x, y, width, height, tileset, speed)
 
 
+class Enemy(Entity):
+    def __init__(self, x, y, width, height, tileset, speed):
+        super().__init__(x, y, width, height, tileset, speed)
+        self.m_width = width
+        self.m_height = height
+        self.width = 0
+        self.height = 0
+        self.grow_speed = 2
+
+        self.collider = [width / 2.5, height / 1.5]
+        self.health = 3
+        enemies.append(self)
+
+    def update(self):
+        if self.width < self.m_width:
+            self.width += self.grow_speed
+        if self.height < self.m_height:
+            self.height += self.grow_speed
+
+        player_center = player.get_center()
+        enemy_center = self.get_center()
+        self.velocity = [player_center[0] - enemy_center[0], player_center[1] - enemy_center[1]]
+        length = (self.velocity[0] ** 2 + self.velocity[1] ** 2) ** 0.5
+        self.velocity = [self.velocity[0] / length, self.velocity[1] / length]
+        self.velocity = [self.velocity[0] * self.speed, self.velocity[1] * self.speed]
+
+        super().update()
+
+    def change_direction(self):
+        if self.velocity[0] < 0:
+            self.direction = HORIZONTAL
+            self.flipX = True
+        elif self.velocity[0] > 0:
+            self.direction = HORIZONTAL
+            self.flipX = False
+
+        if self.velocity[1] > self.velocity[0] > 0:
+            self.direction = DOWN
+        elif self.velocity[1] < self.velocity[0] < 0:
+            self.direction = UP
+
+    def take_damage(self, damage):
+        self.health -= damage
+        if self.health > 0:
+            return
+
+        self.destroy()
+
+    def destroy(self):
+        objects.remove(self)
+        enemies.remove(self)
+
+
 player_input = {"left": False, "right": False, "up": False, "down": False}
 
 
@@ -133,9 +202,32 @@ def load_tileset(filename, width, height):
 
 
 # Objects
-#test_object = Object(400, 400, 50, 50, pygame.image.load("assets/heart.png"))
-#test_entity = Entity(400, 400, 50, 50, "assets/player-Sheet.png", 5)
-player = Player(WINDOW_SIZE[0] / 2, WINDOW_SIZE[1] / 2, 75, 75, "assets/player-Sheet.png", 5)
+player = Player(WINDOW_SIZE[0] / 2, WINDOW_SIZE[1] / 2, 75, 75, PLAYER_TILESET, 5)
+enemy = Enemy(100, 100, 75, 75, ENEMY_TILESET, 2)
+
+target = Object(0, 0, 50, 50, CURSOR)
+
+
+def shoot():
+    player_center = player.get_center()
+    bullet = Object(player_center[0], player_center[1], 16, 16, BULLET)
+    bullet.velocity = [target.x + target.width / 2 - bullet.x, target.y + target.height / 2 - bullet.y]
+
+    length = (bullet.velocity[0] ** 2 + bullet.velocity[1] ** 2) ** 0.5
+
+    bullet.velocity = [bullet.velocity[0] / length, bullet.velocity[1] / length]
+    bullet.velocity = [bullet.velocity[0] * 10, bullet.velocity[1] * 10]
+
+    bullets.append(bullet)
+
+
+def check_collisions(obj1, obj2):
+    x1, y1 = obj1.get_center()
+    x2, y2 = obj2.get_center()
+    if x1 + obj1.collider[0] / 2 > x2 - obj2.collider[0] / 2 and x1 - obj1.collider[0] / 2 < x2 + obj2.collider[0] / 2:
+        return y1 + obj1.collider[1] / 2 > y2 - obj2.collider[1] / 2 and y1 - obj1.collider[1] / 2 < y2 + obj2.collider[
+            1] / 2
+    return False
 
 
 while True:
@@ -146,14 +238,34 @@ while True:
             check_input(event.key, True)
         elif event.type == pygame.KEYUP:
             check_input(event.key, False)
+        elif event.type == pygame.MOUSEBUTTONDOWN:
+            shoot()
 
     player.velocity[0] = player_input["right"] - player_input["left"]
     player.velocity[1] = player_input["down"] - player_input["up"]
+
+    pygame.mouse.set_visible(False)
+    mousePos = pygame.mouse.get_pos()
+    target.x = mousePos[0] - target.width / 2
+    target.y = mousePos[1] - target.height / 2
 
     WINDOW.blit(background, (0, 0))
 
     for obj in objects:
         obj.update()
+
+    for b in bullets:
+        if BOUNDS_X[0] <= b.x <= BOUNDS_X[1] and BOUNDS_Y[0] <= b.y <= BOUNDS_Y[1]:
+            continue
+        bullets.remove(b)
+        objects.remove(b)
+
+    for e in enemies:
+        for b in bullets:
+            if check_collisions(e, b):
+                e.take_damage(1)
+                bullets.remove(b)
+                objects.remove(b)
 
     CLOCK.tick(FRAME_RATE)
     pygame.display.update()
