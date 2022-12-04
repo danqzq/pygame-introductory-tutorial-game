@@ -1,6 +1,11 @@
 import pygame
+import random
+from itertools import repeat
 
 pygame.init()
+pygame.font.get_init()
+
+TEXT_FONT = pygame.font.Font("assets/font.otf", 32)
 
 # Constants
 WHITE = (255, 255, 255)
@@ -20,7 +25,8 @@ DOWN = 0
 FRAME_RATE = 60
 ANIMATION_FRAME_RATE = 10
 
-WINDOW = pygame.display.set_mode(WINDOW_SIZE)
+SHAKE_WINDOW = pygame.display.set_mode(WINDOW_SIZE)
+WINDOW = SHAKE_WINDOW.copy()
 pygame.display.set_caption(WINDOW_TITLE)
 
 CLOCK = pygame.time.Clock()
@@ -30,6 +36,9 @@ background = pygame.transform.scale(pygame.image.load("assets/background.png"), 
 objects = []
 bullets = []
 enemies = []
+particles = []
+
+offset = repeat((0, 0))
 
 
 class Object:
@@ -113,6 +122,7 @@ class Entity(Object):
 class Player(Entity):
     def __init__(self, x, y, width, height, tileset, speed):
         super().__init__(x, y, width, height, tileset, speed)
+        self.health = self.max_health = 3
 
     def update(self):
         super().update()
@@ -124,10 +134,24 @@ class Player(Entity):
 class Enemy(Entity):
     def __init__(self, x, y, width, height, tileset, speed):
         super().__init__(x, y, width, height, tileset, speed)
+        self.max_width = width
+        self.max_height = height
+        self.width = 0
+        self.height = 0
 
         self.health = 3
         self.collider = [width / 2.5, height / 1.5]
         enemies.append(self)
+
+        self.start_timer = 0
+
+    def cooldown(self):
+        if self.start_timer < 1:
+            self.start_timer += 0.03
+            self.x -= 1
+            self.y -= 1
+        self.width = int(self.max_width * self.start_timer)
+        self.height = int(self.max_height * self.start_timer)
 
     def update(self):
         player_center = player.get_center()
@@ -137,6 +161,10 @@ class Enemy(Entity):
 
         magnitude = (self.velocity[0] ** 2 + self.velocity[1] ** 2) ** 0.5
         self.velocity = [self.velocity[0] / magnitude * self.speed, self.velocity[1] / magnitude * self.speed]
+
+        self.cooldown()
+        if self.start_timer < 1:
+            self.velocity = [0, 0]
 
         super().update()
 
@@ -151,9 +179,14 @@ class Enemy(Entity):
     def take_damage(self, damage):
         self.health -= damage
         if self.health <= 0:
+            global score
+            score += 1
             self.destroy()
 
     def destroy(self):
+        spawn_particles(self.x, self.y)
+        global offset
+        offset = screen_shake(5, 20)
         objects.remove(self)
         enemies.remove(self)
 
@@ -182,17 +215,52 @@ def load_tileset(filename, width, height):
     return tileset
 
 
+def enemy_spawner():
+    while True:
+        for i in range(60):
+            yield
+        randomX = random.randint(BOUNDS_X[0], BOUNDS_X[1] - 75)
+        randomY = random.randint(BOUNDS_Y[0], BOUNDS_Y[1] - 75)
+        enemy = Enemy(randomX, randomY, 75, 75, "assets/enemy-Sheet.png", 2)
+        player_center = player.get_center()
+        while abs(player_center[0] - enemy.x) < 250 and abs(player_center[1] - enemy.y) < 250:
+            enemy.x = random.randint(BOUNDS_X[0], BOUNDS_X[1] - 75)
+            enemy.y = random.randint(BOUNDS_Y[0], BOUNDS_Y[1] - 75)
+
+
+def spawn_particles(x, y):
+    particle = Object(x, y, 75, 75, pygame.image.load("assets/particles.png"))
+    particles.append(particle)
+
+
+def screen_shake(intensity, amplitude):
+    s = -1
+    for i in range(0, 3):
+        for x in range(0, amplitude, intensity):
+            yield x * s, 0
+        for x in range(amplitude, 0, intensity):
+            yield x * s, 0
+        s *= -1
+    while True:
+        yield 0, 0
+
+
+score = 0
+
+is_game_over = False
 player_input = {"left": False, "right": False, "up": False, "down": False}
 
 # Objects
 player = Player(WINDOW_SIZE[0] / 2, WINDOW_SIZE[1] / 2, 75, 75, "assets/player-Sheet.png", 5)
 target = Object(0, 0, 50, 50, pygame.image.load("assets/cursor.png"))
-enemy = Enemy(200, 200, 75, 75, "assets/enemy-Sheet.png", 2)
+spawner = enemy_spawner()
 
 pygame.mouse.set_visible(False)
 
 
 def shoot():
+    global target
+
     player_center = player.get_center()
     bullet = Object(player_center[0], player_center[1], 16, 16, pygame.image.load("assets/bullet.png"))
 
@@ -205,6 +273,9 @@ def shoot():
 
     bullets.append(bullet)
 
+    target.width += 20
+    target.height += 20
+
 
 def check_collisions(obj1, obj2):
     x1, y1 = obj1.get_center()
@@ -214,6 +285,27 @@ def check_collisions(obj1, obj2):
     if x1 + w1 > x2 - w2 and x1 - w1 < x2 + w2:
         return y1 + h1 > y2 - h2 and y1 - h1 < y2 + h2
     return False
+
+
+def display_ui():
+    for i in range(player.max_health):
+        img = pygame.image.load("assets/heart_empty.png" if i >= player.health else "assets/heart.png")
+        img = pygame.transform.scale(img, (50, 50))
+        WINDOW.blit(img, (i * 50 + WINDOW_SIZE[0] / 2 - player.max_health * 25, 25))
+
+    score_text = TEXT_FONT.render(f'Score: {score}', True, BLACK)
+    WINDOW.blit(score_text, (score_text.get_width() / 2, 25))
+
+    if is_game_over:
+        game_over_text = TEXT_FONT.render("Game over!", True, BLACK)
+        WINDOW.blit(game_over_text, (WINDOW_SIZE[0] / 2 - game_over_text.get_width() / 2,
+                                     WINDOW_SIZE[1] / 2 - game_over_text.get_height() / 2))
+
+
+def update_screen():
+    CLOCK.tick(FRAME_RATE)
+    SHAKE_WINDOW.blit(WINDOW, next(offset))
+    pygame.display.update()
 
 
 while True:
@@ -236,6 +328,36 @@ while True:
 
     WINDOW.blit(background, (0, 0))
 
+    display_ui()
+
+    if is_game_over:
+        pygame.mouse.set_visible(True)
+        update_screen()
+        continue
+
+    next(spawner)
+
+    if player.health <= 0:
+        if not is_game_over:
+            is_game_over = True
+
+    objects.remove(target)
+    objects.sort(key=lambda o: o.y)
+    objects.append(target)
+
+    for p in particles:
+        p.image.set_alpha(p.image.get_alpha() - 1)
+        if p.image.get_alpha() == 0:
+            objects.remove(p)
+            particles.remove(p)
+            continue
+        objects.remove(p)
+        objects.insert(0, p)
+
+    if target.width > 50:
+        target.width -= 2
+        target.height -= 2
+
     for obj in objects:
         obj.update()
 
@@ -246,11 +368,14 @@ while True:
         objects.remove(b)
 
     for e in enemies:
+        if check_collisions(player, e):
+            player.health -= 1
+            e.destroy()
+            continue
         for b in bullets:
             if check_collisions(b, e):
                 e.take_damage(1)
                 bullets.remove(b)
                 objects.remove(b)
 
-    CLOCK.tick(FRAME_RATE)
-    pygame.display.update()
+    update_screen()
