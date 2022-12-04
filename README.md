@@ -1,6 +1,6 @@
 # Baller Knight
 A short game made using pygame!
 
-Here is Tutorial #1:
+Here is Tutorial #3:
 
-[![YouTube Tutorial](https://img.youtube.com/vi/-3oC2C5oNFc/0.jpg)](https://www.youtube.com/watch?v=-3oC2C5oNFc)
+[![YouTube Tutorial](https://img.youtube.com/vi/hM3dL5XEk5E/0.jpg)](https://www.youtube.com/watch?v=hM3dL5XEk5E)
