@@ -1,4 +1,4 @@
-# Baller Knight
+# pygame-introductory-tutorial-game
 A short game made using pygame!
 
 Check out the tutorial series here:
